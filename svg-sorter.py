@@ -3,6 +3,72 @@
 
 # this is rather quick and dirty and it only works on svgs with straight lines
 
+def align_left(paths, mi):
+
+  res = []
+  for path in paths:
+    res.append(path-mi)
+
+  return res
+
+def export_svg(fn, paths, w, h, line_width=0.1):
+
+  from cairo import SVGSurface, Context
+
+  s = SVGSurface(fn, w, h)
+  c = Context(s)
+
+  c.set_line_width(line_width)
+
+  for path in paths:
+
+    c.new_path()
+    c.move_to(*path[0,:])
+    for p in path[1:]:
+      c.line_to(*p)
+    c.stroke()
+
+  c.save()
+
+def get_mid(v):
+
+  from numpy import array
+
+  mi = v.min(axis=0).squeeze()
+  ma = v.max(axis=0).squeeze()
+  midx = mi[0]+ma[0]
+  midy = mi[1]+ma[1]
+  move = array([[midx,midy]])*0.5
+  return mi, ma, move
+
+def spatial_concat(paths, eps=1.e-9):
+
+  from numpy.linalg import norm
+  from numpy import row_stack
+
+  res = []
+  curr = paths[0]
+  concats = 0
+  for p in paths[1:]:
+    if p.shape[0]<2:
+      print('WARNING: path with only one vertex.')
+      continue
+    if norm(p[0,:]-curr[-1,:])<eps:
+      curr = row_stack([curr, p[1:,:]])
+      concats += 1
+    else:
+      res.append(curr)
+      curr = p
+
+  res.append(curr)
+
+  print('concats: ', concats)
+  print('original paths: ', len(paths))
+  print('number after concatination: ', len(res))
+
+  print()
+
+  return res
 
 def spatial_sort(paths, init_rad=0.01):
 
@@ -71,7 +137,7 @@ def spatial_sort(paths, init_rad=0.01):
 
   return res, order
 
-def do_sort(fn, out):
+def get_lines_from_svg(fn, out):
 
   from lxml import etree
   from numpy import array
@@ -87,11 +153,8 @@ def do_sort(fn, out):
 
     print('num fields', len(fields))
 
-    parent = fields[0].getparent()
-
     for f in fields:
 
-      f.getparent().remove(f)
       x1 = f.xpath('@x1').pop()
       y1 = f.xpath('@y1').pop()
       x2 = f.xpath('@x2').pop()
@@ -99,34 +162,30 @@ def do_sort(fn, out):
 
       p = array([[x1,y1], [x2,y2]], 'float')
       paths.append(p)
-    res, _ = spatial_sort(paths)
 
-  for row in res:
-    el = etree.Element(
-      'line', **{'fill':'none', 'stroke':'#000000', 'stroke-linecap':'round',
-        'stroke-linejoin':'round',
-        'x1': str(row[0,0]),
-        'y1': str(row[0,1]),
-        'x2': str(row[1,0]),
-        'y2': str(row[1,1]),
-        }
-    )
-    parent.append(el)
+    return paths
 
-  with open(out, 'w') as f:
-      f.write(etree.tostring(root, pretty_print = True))
 
 
 def main(args, **argv):
 
-  # from cairo import SVGSurface, Context
+  from numpy import row_stack
 
   fn = args.fn
   out = args.out
 
-  do_sort(fn, out)
+  # w = 1000
+  # h = 1000
 
-  return
+  paths = get_lines_from_svg(fn, out)
+  mi, ma, move = get_mid(row_stack(paths))
+  paths, _ = spatial_sort(paths)
+  paths = spatial_concat(paths)
+  paths = align_left(paths, mi)
+
+  w, h = ma - mi
+  export_svg(out, paths, w, h, line_width=1)
+  # return
 
 if __name__ == '__main__':
 
