@@ -30,6 +30,27 @@ def export_svg(fn, paths, w, h, line_width=0.1):
 
   c.save()
 
+def export_svg_svgwrite(fn, paths, w, h, line_width=0.1):
+
+  from svgwrite import Drawing
+  w_str = "{}pt".format(w)
+  h_str = "{}pt".format(h)
+
+  dwg = Drawing(filename = fn,
+                size = (w_str, h_str),
+                viewBox=("0 0 {} {}".format(w,h)))
+
+  for path in paths:
+    if(len(path) > 1):
+      str_list = []
+      str_list.append("M {},{}".format(path[0,0],path[0,1]))
+      for e in path[1:]:
+        str_list.append(" L {},{}".format(e[0],e[1]))
+      s = ''.join(str_list)
+      dwg.add(dwg.path(s).stroke(color="rgb(0%,0%,0%)",width=line_width).fill("none"))
+
+  dwg.save()
+
 def get_mid(v):
 
   from numpy import array
@@ -184,7 +205,11 @@ def main(args, **argv):
   paths = align_left(paths, mi)
 
   w, h = ma - mi
-  export_svg(out, paths, w, h, line_width=1)
+  if args.svgwrite:
+    export_svg_svgwrite(out, paths, w, h, line_width=1)
+  else:
+    export_svg(out, paths, w, h, line_width=1)
+
   # return
 
 if __name__ == '__main__':
@@ -201,6 +226,13 @@ if __name__ == '__main__':
     '--out',
     type=str,
     required=True
+  )
+  parser.add_argument(
+    '--svgwrite',
+    default=False,
+    action='store_true',
+    help="Disable cairo and use svgwrite instead.",
+    required=False
   )
 
   args = parser.parse_args()
